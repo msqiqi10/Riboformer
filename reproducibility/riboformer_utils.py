@@ -5,9 +5,10 @@ import itertools
 import matplotlib
 import pandas as pd
 import seaborn as sns
-import os
+import os, io
 import re
 from scipy import stats
+from pathlib import Path
 
 def fasta_iter(fasta_name):
     """
@@ -28,20 +29,56 @@ def fasta_iter(fasta_name):
 def read_gene_densities(file_path, file_name, suffixes):
     """Read gene densities from files with given suffixes."""
     with open(file_path + file_name + suffixes[0], 'r') as read_file:
+    # with open(fname1, 'r') as read_file:
         lines = read_file.readlines()
 
     densities1 = []
     for i in range(2, len(lines)):
         densities1.append(lines[i].replace('\n', '').replace('\r', '').split('\t'))
-    densities1 = np.array(densities1).astype(np.float)
+    densities1 = np.array(densities1).astype(np.float32)
 
     with open(file_path + file_name + suffixes[1], 'r') as read_file:
+    # with open(fname2, 'r') as read_file:
         lines2 = read_file.readlines()
 
     densities2 = []
     for i in range(2, len(lines2)):
         densities2.append(lines2[i].replace('\n', '').replace('\r', '').split('\t'))
-    densities2 = np.array(densities2).astype(np.float)
+    densities2 = np.array(densities2).astype(np.float32)
+
+    max_density_index = int(max([densities1[-1, 0], densities2[-1, 0]]))
+    combined_densities = np.zeros([max_density_index, 3])
+
+    for i in range(len(densities1)):
+        combined_densities[int(densities1[i, 0] - 1), 1] = densities1[i, 1]
+
+    for i in range(len(densities2)):
+        combined_densities[int(densities2[i, 0] - 1), 2] = densities2[i, 1]
+
+    normalize_factor = np.sum(combined_densities[:, 1]) + np.sum(combined_densities[:, 2])
+    combined_densities = combined_densities * 40000 / normalize_factor
+
+    return combined_densities
+
+def read_gene_densities_new(fname1, fname2):
+    """Read gene densities from files with given suffixes."""
+    # with open(file_path + file_name + suffixes[0], 'r') as read_file:
+    with open(fname1, 'r') as read_file:
+        lines = read_file.readlines()
+
+    densities1 = []
+    for i in range(2, len(lines)):
+        densities1.append(lines[i].replace('\n', '').replace('\r', '').split(' '))
+    densities1 = np.array(densities1).astype(np.float32)
+
+    # with open(file_path + file_name + suffixes[1], 'r') as read_file:
+    with open(fname2, 'r') as read_file:
+        lines2 = read_file.readlines()
+
+    densities2 = []
+    for i in range(2, len(lines2)):
+        densities2.append(lines2[i].replace('\n', '').replace('\r', '').split(' '))
+    densities2 = np.array(densities2).astype(np.float32)
 
     max_density_index = int(max([densities1[-1, 0], densities2[-1, 0]]))
     combined_densities = np.zeros([max_density_index, 3])
@@ -133,10 +170,18 @@ def get_pause_score(a_site, read_a_site, dwig, gene_data, sequence, y_pred, z_c,
                 if pred == 1:
                     c_indices = np.where(z_c[:, 0] == i)[0]
                     for p in c_indices:
-                        r_pro_2[int(z_c[p, 1]) * 3 - 30 + (read_a_site - a_site):int(z_c[p, 1]) * 3 + 3 - 30 + (
-                                    read_a_site - a_site)] = 0
-                        r_pro_2[int(z_c[p, 1]) * 3 + 1 - 30 + (read_a_site - a_site)] = (np.power(2, (
-                        y_pred[p]) + 5) - 32) / normal_factor
+                        # r_pro_2[int(z_c[p, 1]) * 3 - 30 + (read_a_site - a_site):int(z_c[p, 1]) * 3 + 3 - 30 + (
+                        #             read_a_site - a_site)] = 0
+                        # r_pro_2[int(z_c[p, 1]) * 3 + 1 - 30 + (read_a_site - a_site)] = (np.power(2, (
+                        # y_pred[p]) + 5) - 32) / normal_factor
+                        start_idx = int(z_c[p, 1]) * 3 - 30 + (read_a_site - a_site)
+                        end_idx = int(z_c[p, 1]) * 3 + 3 - 30 + (read_a_site - a_site)
+                        value_idx = int(z_c[p, 1]) * 3 + 1 - 30 + (read_a_site - a_site)
+                        
+                        if 0 <= start_idx < len(r_pro_2) and 0 <= end_idx <= len(r_pro_2):
+                            r_pro_2[start_idx:end_idx] = 0
+                            if 0 <= value_idx < len(r_pro_2):
+                                r_pro_2[value_idx] = (np.power(2, (y_pred[p]) + 5) - 32) / normal_factor
 
                 r_dc_2 = sum_adjac(r_pro_2)
 

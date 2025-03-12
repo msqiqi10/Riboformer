@@ -18,11 +18,11 @@ def main():
                                      description = 'Parameters for testing model')
     test.add_argument('-e', '--epoch', default = 10, type = int, 
                       help = 'epoch number for model training')
-    test.add_argument('-b', '--batch', default = 64, type = int, 
+    test.add_argument('-b', '--batch', default = 256, type = int, 
                       help = 'batch size for model training')
     test.add_argument('-s', '--split', default = 0.7, type = float,
                       help = 'proportion for the training dataset')
-    test.add_argument('-l', '--learning', default = 0.0005, type = float, 
+    test.add_argument('-l', '--learning', default = 0.001, type = float, 
                       help = 'learning rate for model training')
     test.add_argument('-save', '--save', action = 'store_true', 
                       help = 'Save the model and training results')
@@ -33,7 +33,7 @@ def main():
     run.add_argument('-i', '--input_folder', default = 'GSE119104_Mg_buffer', help='Input data folder')
 
     args = parser.parse_args()
-    
+    print(args)
     
     # initiate the model & the model configs
     model_config = Config()
@@ -44,12 +44,12 @@ def main():
 
     print("--------------------------------------------------\nData loading")
 
-    path = os.getcwd()
-    parpath = os.path.dirname(path)
-    datapath = parpath + '/datasets/' + args.input_folder + '/'
-    print(f"Current dictionary: {datapath}")
+    # path = os.getcwd()
+    # parpath = os.path.dirname(path)
+    # datapath = parpath + '/datasets/' + args.input_folder + '/'
+    # print(f"Current dictionary: {datapath}")
 
-    all_files = os.listdir(datapath)
+    all_files = os.listdir(args.input_folder)
     xc_files = [f for f in all_files if f.endswith('xc.txt')]
     yc_files = [f for f in all_files if f.endswith('yc.txt')]
 
@@ -59,8 +59,8 @@ def main():
     if len(xc_files) > 1 or len(yc_files) > 1:
         print("Multiple training datasets exist.")
 
-    x_c = np.loadtxt(datapath + xc_files[0], delimiter="\t")
-    y_c = np.loadtxt(datapath + yc_files[0], delimiter="\t")
+    x_c = np.loadtxt(args.input_folder + xc_files[0], delimiter="\t")
+    y_c = np.loadtxt(args.input_folder + yc_files[0], delimiter="\t")
 
     x_c[:,:wsize] = x_c[:,:wsize]/100 - 5
     y_c = y_c/100 - 5
@@ -73,6 +73,10 @@ def main():
     indices = np.random.permutation(data_size)
     training_idx, test_idx, val_idx = np.split(indices, [num_train, num_train + num_val])
 
+    np.savetxt(args.input_folder + 'training_idx.txt', training_idx, delimiter = '\t')
+    np.savetxt(args.input_folder + 'test_idx.txt', test_idx, delimiter = '\t')
+    np.savetxt(args.input_folder + 'val_idx.txt', val_idx, delimiter = '\t')
+    
     x_train, y_train = x_c[training_idx], y_c[training_idx]
     x_val, y_val = x_c[val_idx], y_c[val_idx]
     x_test, y_test = x_c[test_idx], y_c[test_idx]
@@ -122,7 +126,7 @@ def main():
 
     # save the model prediction in the test dataset
     if args.save:
-        np.savetxt(datapath + 'model_prediction.txt', model_results, delimiter = '\t')
+        np.savetxt(args.input_folder + 'model_prediction.txt', model_results, delimiter = '\t')
 
     # output all the correlations
     corr = np.corrcoef(predict_test, y_test)[0,1]
@@ -136,7 +140,7 @@ def main():
 
     # save the model
     if args.save:
-        model.save(parpath + "/models/" + args.output_h5, save_format = 'tf')
+        model.save(args.input_folder + "/models/" + args.output_h5, save_format = 'tf')
 
     print("--------------------------------------------------\nfinished!")       
 

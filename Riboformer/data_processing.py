@@ -9,6 +9,7 @@ import argparse
 from itertools import groupby
 from Bio import SeqIO
 from BCBio import GFF
+np.seterr(invalid='raise')
 
 # load fasta files
 def fasta_iter(fasta_name):
@@ -37,11 +38,13 @@ def read_wig(filename):
     # read forward direction
     wig1 = {}
     chrom_all = []
+    # /home/zzz0054/chen_data/Riboformer/datasets/AA/AuxinA0FootprintR4_DNA_f.wig
+    # /home/zzz0054/chen_data/Riboformer/datasets/AA/AuxinA0FootprintR4_f.wig
     with open(filename + '_f.wig', 'r') as read_file:
         lines = read_file.readlines()
         for j in range(1, len(lines)):
             if lines[j][0] == 'f':
-                chrom_all.append(lines[j].split(' ')[2].split('=')[1].replace('chr', ''))
+                chrom_all.append(lines[j].split(' ')[1].split('=')[1].replace('chr', ''))
                 if j > 2:
                     wig1[chrom_all[-2]] = np.array(read)
                 read = []
@@ -55,7 +58,7 @@ def read_wig(filename):
         lines = read_file.readlines()
         for j in range(1, len(lines)):
             if lines[j][0] == 'f':
-                chrom_all.append(lines[j].split(' ')[2].split('=')[1].replace('chr', ''))
+                chrom_all.append(lines[j].split(' ')[1].split('=')[1].replace('chr', ''))
                 if j > 2:
                     wig2[chrom_all[-2]] = np.array(read)
                 read = []
@@ -112,6 +115,27 @@ def generate_training(my_data2, seq, Dwig1, Dwig2, wsize, Ctable, P_site = 14, t
         # 3' is aligned
         if data[2] == 1:
             # positive strand
+            # This code appears to be working with RNA/genomic data processing:
+
+            # Breaking down the components:
+
+            # Dwig1 seems to be a 2D array/matrix containing sequence data
+            # data[0] and data[1] are likely start and end positions
+            # P_site appears to be an offset value for the P-site position
+            # n is probably a window size parameter
+            # The , 1 at the end indicates selecting column 1 from the 2D array
+            # The operation:
+
+            # Takes a slice of Dwig1 array
+            # Start position: (int(data[0]) - 1 - n) + P_site
+            # End position: int(data[1]) + n + P_site
+            # Selects only column 1 from this slice
+            # Purpose:
+
+            # This code likely extracts a region of interest around a ribosome P-site
+            # The -1 adjusts for 0-based indexing
+            # The ±n extends the window around the region
+            # P_site adjusts for the P-site offset
             if data[1] - data[0] > gene_len:
                 RD1 = Dwig1[(int(data[0]) - 1 - n) + P_site : int(data[1]) + n + P_site, 1]
         else:
@@ -132,6 +156,32 @@ def generate_training(my_data2, seq, Dwig1, Dwig2, wsize, Ctable, P_site = 14, t
         gene_len = 200
         
         # 3' is aligned
+        
+        # This loop processes RNA sequence/ribosome profiling data using a sliding window approach:
+
+        # Window Operation:
+
+        # wsize is window size
+        # Loop runs from wsize/2 to len(RD1) - wsize/2
+        # Creates sliding window centered at position m
+        # Data Collection:
+
+        # x_c: Training features combining:
+        # Log-transformed read counts from window
+        # Position information
+        # Codon vectors
+        # y_c: Target values (log-transformed read counts from RD2)
+        # z_c: Position tracking
+        # Meaning of z_c
+        # z_c stores position information as pairs:
+
+        # i: Likely an index of the current sequence/gene
+        # m: Current position in the window
+        # This appears to be building a dataset for machine learning, where:
+
+        # z_c helps track where predictions come from in the original sequence
+        # Used for mapping predictions back to source positions later
+        
         if data[2] == 1:
             # positive strand
             if data[1] - data[0] > gene_len:
@@ -160,6 +210,7 @@ def generate_training(my_data2, seq, Dwig1, Dwig2, wsize, Ctable, P_site = 14, t
             RD2 = sum_adjac(RD2)
             
             rc1 = 10000*normal
+            #  norm = 0.005/np.mean(RD1_mean_list)
             rc2 = 32
             rc3 = 100
 
@@ -179,6 +230,7 @@ def generate_training(my_data2, seq, Dwig1, Dwig2, wsize, Ctable, P_site = 14, t
 
     return x_c, y_c, z_c
 
+# 这里是不是只是其中一种
 
 def main():
     
@@ -190,13 +242,13 @@ def main():
                         help = 'window size (AA) for model training')
     parser.add_argument('-th', '--threshold', default = 25, type = int, 
                         help = 'expression threshold (percentile) for model training')
-    parser.add_argument('-d', '--data_dir', default = 'GSE119104_Mg_buffer', type = str,
+    parser.add_argument('-d', '--data_dir', default = '/home/zzz0054/chen_data/Riboformer/datasets/AA/', type = str,
                         help = 'data folder name')
-    parser.add_argument('-r', '--reference', default = 'GSM3358138_filter_Cm_ctrl', type = str,
+    parser.add_argument('-r', '--reference', default = 'AuxinC0FootprintR4_DNA', type = str,
                         help = 'reference dataset name')
     parser.add_argument('-p', '--psite', default = 14, type = int,
                         help = 'offset for p site position')
-    parser.add_argument('-t', '--target', default = 'GSM3358140_freeze_Mg_ctrl', type = str,
+    parser.add_argument('-t', '--target', default = 'AuxinA0FootprintR4_DNA', type = str,
                         help = 'target dataset name')
                 
     args = parser.parse_args()
@@ -208,17 +260,17 @@ def main():
                 'z_index': 'zc.txt',
                 'y_pred': 'ypred.txt',
                 }
-    parpath = os.path.dirname(os.getcwd())
-    datapath = parpath + '/datasets/' + args.data_dir + '/'
+    # parpath = os.path.dirname(os.getcwd())
+    # datapath = parpath + '/Riboformer/datasets/' + args.data_dir + '/'
     for key in filepath.keys():
-        filepath[key] = datapath + filepath[key]
+        filepath[key] = args.data_dir + filepath[key]
     
-    all_files = os.listdir(datapath)
+    all_files = os.listdir(args.data_dir)
     fasta_file = [f for f in all_files if f.endswith('.fasta')]
     gff_file = [f for f in all_files if f.endswith('.gff3')]
 
     # load codon table
-    with open('codon_table.json') as f:
+    with open('/home/zzz0054/chen_data/Riboformer/Riboformer/codon_table.json') as f:
         Ctable = json.load(f)
         
     complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
@@ -234,7 +286,7 @@ def main():
     print("---------------------------------------------")
     print("Loading genome sequences.")
     seq_dict = {}
-    for record in SeqIO.parse(datapath + fasta_file[0], "fasta"):
+    for record in SeqIO.parse(args.data_dir + fasta_file[0], "fasta"):
         seq_dict[record.id] = record.seq
         print(record.id + " len is " + str(len(record.seq)))
 
@@ -247,7 +299,7 @@ def main():
     for key in seq_dict.keys():
         if key != 'Mito':
             limit_info = dict(gff_id=[key], gff_type=["CDS"])
-            in_handle = open(datapath + gff_file[0])
+            in_handle = open(args.data_dir + gff_file[0])
             gff_data = []
             for rec in GFF.parse(in_handle, limit_info=limit_info):
                 for j in range(len(rec.features)):
@@ -259,8 +311,7 @@ def main():
             in_handle.close()
             gff_data = np.array(gff_data)
 
-            x_c, y_c, z_c = generate_training(gff_data, seq_dict[key], Dwig1[key], Dwig2[key], args.wsize, Ctable, int(args.psite),
-                                              float(args.threshold))
+            x_c, y_c, z_c = generate_training(gff_data, seq_dict[key], Dwig1[key], Dwig2[key], args.wsize, Ctable, int(args.psite), float(args.threshold))
             x_c_total = x_c_total + x_c
             y_c_total = y_c_total + y_c
             z_c_total = z_c_total + z_c
@@ -281,3 +332,11 @@ def main():
 
 if __name__ == '__main__':
     main()
+    
+# x_c [82] -> y_c (y)
+
+# 12345->6789
+# 123456->7
+# 1234567->8
+# 12345678->9
+# 12345 6789
